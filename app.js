@@ -20,16 +20,19 @@ var fragmentShaderSource = `#version 300 es
     precision mediump float;
 
     const float MIN_DIST = 0.01f;
-    const float MAX_DIST = 128.f;
+    const float MAX_DIST = 64.f;
     const int MAX_STEPS = 128;
     
-    const vec3 lightDir = normalize(vec3(1.5,.76,-1));
+    const vec3 lightDir = normalize(vec3(.5,.76,-14));
     const vec3 lightCol = vec3(0.92,0.9,0.7);
 
     const vec3 skyCol = vec3(.1,0.15,0.5);
     const vec3 floorCol = vec3(0.12,0.07,0.04);
-    const vec3 horizonCol = vec3(0.1,0.1,0.17);
+    const vec3 horizonCol = vec3(.1,0.15,0.5)*1.3;
     
+    const vec2 boatSpeed = vec2(0.,-.5);
+
+
     uniform float time;
 
     in vec3 rd;
@@ -97,18 +100,20 @@ var fragmentShaderSource = `#version 300 es
     float sdf_sphere(vec3 p, float r){
         return length(p)-r;
     }
-
+    float sdf_boat(vec3 p){
+        return 99.;
+    }
     float map(vec3 p){
-        float addition = sin(p.x*5.0f + time*5.0f)*.15f;
+        //float addition = sin(p.x*5.0f + time*5.0f)*.15f;
         //float sph = sdf_sphere(p-vec3(addition,0,-5), sin(time)+1.5);
-        float sph = 999.;
+        //float sph = 999.;
 
+        float sph = sdf_boat(p);
         //SEA-----------------------------------
         float d = length(p - ro);
         p.y -= d*d*.002;
-        vec2 boatSpeed = vec2(0.,-.5);
         vec2 seaPos = p.xz*.25 + time * boatSpeed;
-        float waveHeight = getwaves(seaPos, 8);
+        float waveHeight = getwaves(seaPos, 16);
 
         //float floor = sdf_sphere(p-vec3(0, 51,3), 48.0 + waveHeight);
         float floor = -(p.y + waveHeight)+3.;
@@ -116,7 +121,6 @@ var fragmentShaderSource = `#version 300 es
     }
 
     vec3 calcNormal(vec3 p){
-
         float d = map(p);
         return normalize(vec3(
             d-map(p + vec3(MIN_DIST, 0, 0)),
@@ -150,25 +154,35 @@ var fragmentShaderSource = `#version 300 es
         }
         return res;
     }
-
+    vec3 getAlbedo(vec3 p){
+        if(p.y < 2.){
+            return vec3(1,1,1);
+        }
+        else return skyCol*5.;
+    }
     void main() {
         float d = raymarch(ro,rd);
-        vec3 hit = ro + rd * d;
         if(d < 0.0){
             color = vec4(ambient(-rd)*5.,1.);
             return;
         }
+        vec3 hit = ro + rd * d;
         vec3 n = calcNormal(hit);
-        float shadow = shadow(hit-n*MIN_DIST, -lightDir);
+        //float shadow = min(1.,shadow(hit-n*MIN_DIST, -lightDir));
         float fresnel = fresnel(n);
         fresnel*=fresnel*fresnel;
-        vec3 col = fresnel * skyCol*5.;
+        vec3 albedo = getAlbedo(hit);
+        vec3 col = fresnel*albedo;
         //vec3 col = dirLight(n, shadow)*1.0-fresnel;
         col += ambient(n);
-        col+= specular(n, -rd);
-        float depth = d/64.0;
-        col = mix(col, skyCol*5., depth*depth);
+        float depth = d/50.0;
+        if(depth > 0.999)
+            depth = 1.;
+        col += specular(n, -rd);
+        col = mix(col, skyCol*6., depth*depth);
+
         color = vec4(col,1);
+        //color = vec4(vec3(shadow),1);
     }`;
 
 let bufferData = new Float32Array(
